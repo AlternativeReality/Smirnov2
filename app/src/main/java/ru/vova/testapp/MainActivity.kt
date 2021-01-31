@@ -9,6 +9,11 @@ import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.engine.GlideException
+import com.bumptech.glide.load.resource.gif.GifDrawable
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
 import com.google.gson.Gson
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.*
@@ -20,7 +25,7 @@ private const val CHARACTER_DATA_API =
 private const val TAG = "myLogs"
 class MainActivity : AppCompatActivity() {
     var position:Int = 0
-    var lastPosition=0;
+    var lastPosition=0
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -33,47 +38,8 @@ class MainActivity : AppCompatActivity() {
             ImageViewText.text = "нет подключения"
         }
         getNext.setOnClickListener {
-            //position++
-            if (!amIConnected()) {
-                position++
-                if (position <=lastPosition) {
-                    showNext()
-                }
-                else {
-                    if (position>lastPosition) position=lastPosition+1
-                    mImageView.setImageResource(R.drawable.ic_cloud_off_24px)
-                    ImageViewText.text = "нет подключения"
-                    Log.v(TAG, position.toString())
-                }
-            }
-
-            if (amIConnected()){
-                try {
-                    if (memList.isEmpty()){
-                        position = 0
-                        loadData()
-                    }else {
-                        position++
-                        lastPosition = position
-                        showNext()
-                        Log.v(TAG, position.toString())
-                    }
-                }
-
-                catch (e: Exception){
-                    //position--
-                    position = memList.size
-                    showNext()
-//                    mImageView.setImageResource(R.drawable.ic_baseline_not_interested_24)
-//                    ImageViewText.text = "ошибка загрузки drrr"
-                    Log.v(TAG, position.toString())
-                }
-            } else{
-                mImageView.setImageResource(R.drawable.ic_cloud_off_24px)
-                ImageViewText.text = "нет подключения"
-                Log.v(TAG, position.toString())
-            }
-
+            nextGif()
+            pBar.isVisible=true
         }
         getPrev.setOnClickListener {
             position--
@@ -84,41 +50,107 @@ class MainActivity : AppCompatActivity() {
 
 
 
+    private fun nextGif() {
+        if (!amIConnected()) {
+            position++
+            if (position <= lastPosition) {
+                showNext()
+            } else {
+                if (position > lastPosition) position = lastPosition + 1
+                mImageView.setImageResource(R.drawable.ic_cloud_off_24px)
+                pBar.isVisible=false
+                ImageViewText.text = "нет подключения"
+                Log.v(TAG, position.toString())
+            }
+        }
 
+        if (amIConnected()) {
+            try {
+                if (memList.isEmpty()) {
+                    position = 0
+                    loadData()
+                } else {
+                    position++
+                    lastPosition = position
+                    showNext()
+                    Log.v(TAG, position.toString())
+                }
+            } catch (e: Exception) {
+                //position--
+                position = memList.size
+                showNext()
+//                    mImageView.setImageResource(R.drawable.ic_baseline_not_interested_24)
+//                    ImageViewText.text = "ошибка загрузки drrr"
+                Log.v(TAG, position.toString())
+            }
+        } else {
+            mImageView.setImageResource(R.drawable.ic_cloud_off_24px)
+            pBar.isVisible=false
+            ImageViewText.text = "нет подключения"
+            Log.v(TAG, position.toString())
+        }
+    }
     val memList = mutableListOf<Generator.DataApi>()
     val scope = CoroutineScope(Dispatchers.IO)
     val scope2 = CoroutineScope(Dispatchers.Main)
     private fun loadData() = scope.launch {
 
-            val apiData = URL(CHARACTER_DATA_API).readText()
-            var builder = Gson()
-            var simpleData: Generator.DataApi =
-                builder?.fromJson<Generator.DataApi>(apiData, Generator.DataApi::class.java)
-            if (simpleData!=null){
-                memList.add(simpleData)
-            }
+        val apiData = URL(CHARACTER_DATA_API).readText()
+        var builder = Gson()
+        var simpleData: Generator.DataApi =
+            builder.fromJson<Generator.DataApi>(apiData, Generator.DataApi::class.java)
 
-            Log.v(TAG,"plen" + simpleData.id)
-            setGif(simpleData)
+        memList.add(simpleData)
+
+        Log.v(TAG,"plen" + simpleData.id)
+        setGif(simpleData)
 
     }
     private fun setGif(obj: Generator.DataApi) = scope2.launch {
-            if (obj.gifURL!= ""){
-                Glide.with(applicationContext).asGif().load(obj.gifURL).into(mImageView)}
-            else {
-                mImageView.setImageResource(R.drawable.ic_baseline_not_interested_24)
-                ImageViewText.text = "ошибка загрузки"
-            }
+        if (obj.gifURL!= ""){
+            Glide.with(applicationContext).asGif().load(obj.gifURL).listener(object :
+                RequestListener<GifDrawable> {
+                override fun onResourceReady(
+                    resource: GifDrawable?,
+                    model: Any?,
+                    target: Target<GifDrawable>?,
+                    dataSource: DataSource?,
+                    isFirstResource: Boolean
+                ): Boolean {
+                    pBar.isVisible = false
+                    return false
+                }
 
-            ImageViewText.text = obj.description
-            ImageViewText.isVisible = true
-            if (obj == memList.first()) {
-                getPrev.isEnabled = false
-                getPrev.isClickable = false
-            } else {
-                getPrev.isEnabled = true
-                getPrev.isClickable = true
-            }
+                override fun onLoadFailed(
+                    e: GlideException?,
+                    model: Any?,
+                    target: Target<GifDrawable>?,
+                    isFirstResource: Boolean
+                ): Boolean {
+                    pBar.isVisible = false
+                    mImageView.setImageResource(R.drawable.ic_cloud_off_24px)
+                    return false
+                }
+//                override fun onResourceReady(p0: Drawable?, p1: Any?, p2: Target<GifDrawable>?, p3: DataSource?, p4: Boolean): Boolean {
+//                    Log.d(TAG, "OnResourceReady")
+//                    //do something when picture already loaded
+//                    return false
+//                }
+            }).into(mImageView)}
+        else {
+            mImageView.setImageResource(R.drawable.ic_baseline_not_interested_24)
+            ImageViewText.text = "ошибка загрузки"
+        }
+
+        ImageViewText.text = obj.description
+        ImageViewText.isVisible = true
+        if (obj == memList.first()) {
+            getPrev.isEnabled = false
+            getPrev.isClickable = false
+        } else {
+            getPrev.isEnabled = true
+            getPrev.isClickable = true
+        }
     }
     private fun showNext() {
 
@@ -139,7 +171,7 @@ class MainActivity : AppCompatActivity() {
 //        }
 //        setGif(currentObj)
         //position--
-              var currentObj = memList[position]
+        var currentObj = memList[position]
         if (currentObj == memList.first()) {
             getPrev.isEnabled=false
             getPrev.isClickable=false
